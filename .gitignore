@@ -1,0 +1,65 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# Build outputs
+bin/
+out/
+target/
+build/
+release/
+
+# Maven
+.mvn/
+# Keep wrapper if you add Maven later:
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
+**/build/
+# Keep wrapper if you add Gradle later:
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# IDEs/Editors
+
+# VS Code
+.vscode/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# Logs
+*.log
+logs/
+
+
+# Coverage / reports
+coverage/
+jacoco*.exec
+
+# Temp / Cache
+tmp/
+.temp/
+*.tmp
+.cache/
+
+# Environment / secrets
+.env
+.env.*
