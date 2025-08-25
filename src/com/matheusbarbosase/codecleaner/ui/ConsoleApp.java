@@ -2,6 +2,7 @@ package com.matheusbarbosase.codecleaner.ui;
 
 import com.matheusbarbosase.codecleaner.core.DuplicateFinder;
 import com.matheusbarbosase.codecleaner.core.FileHasher;
+import com.matheusbarbosase.codecleaner.core.model.DuplicateGroup;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,29 +28,30 @@ public class ConsoleApp {
         var finder = new DuplicateFinder(hasher);
 
         try {
-            var bySize = finder.groupBySize(root);
+            List<DuplicateGroup> groups = finder.findDuplicates(root);
 
-            long groups = bySize.values().stream().filter(list -> list.size() >= 2).count();
-            long filesInGroups = bySize.values().stream().filter(list -> list.size() >= 2).mapToLong(List::size).sum();
+            long filesInGroups = groups.stream()
+                    .mapToLong(g -> g.getPaths().size())
+                    .sum();
 
             System.out.println("Scan root: " + root.toAbsolutePath());
-            System.out.println("Candidate groups (same size >= 2): " + groups);
-            System.out.println("Candidate files: " + filesInGroups);
+            System.out.println("Duplicate groups (by content): " + groups.size());
+            System.out.println("Files in duplicate groups: " + filesInGroups);
             System.out.println();
 
-            bySize.entrySet().stream()
-                    .filter(e -> e.getValue().size() >= 2)
-                    .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
+            groups.stream()
                     .limit(20)
-                    .forEach(e -> {
-                        System.out.println("Size: " + e.getKey() + " bytes | Files: " + e.getValue().size());
-                        e.getValue().stream().limit(5).forEach(p -> System.out.println("  - " + p));
-                        int remaining = e.getValue().size() - 5;
+                    .forEach(g -> {
+                        System.out.println("Hash: " + g.getHash() + " | Files: " + g.size());
+                        g.getPaths().stream().limit(5).forEach(p -> System.out.println("  - " + p));
+                        int remaining = g.size() - 5;
                         if (remaining > 0) System.out.println("  ... +" + remaining + " more");
                         System.out.println();
                     });
 
-            System.out.println("Next: content hashing to confirm duplicates.");
+            if (groups.isEmpty()) {
+                System.out.println("No duplicates found.");
+            }
         } catch (Exception e) {
             System.err.println("Scan failed: " + e.getMessage());
         }

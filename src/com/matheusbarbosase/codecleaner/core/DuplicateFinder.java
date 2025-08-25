@@ -12,7 +12,8 @@ import java.util.stream.Stream;
 
 /**
  * Finds duplicate files under a root directory.
- * Stage 1 exposes a cheap pre-filter by grouping files by size.
+ * Stage 1: pre-filter by file size.
+ * Stage 2: confirm by content hash (SHA-256).
  */
 public class DuplicateFinder {
 
@@ -46,9 +47,38 @@ public class DuplicateFinder {
     }
 
     /**
-     * Stage 2 will refine candidates by hashing content.
+     * Returns groups of files that share the same content hash.
+     * Only size-candidate files are hashed.
+     * @param root scan root
+     * @return duplicate groups (size >= 2)
+     * @throws IOException on IO failure
      */
     public List<DuplicateGroup> findDuplicates(Path root) throws IOException {
-        return List.of();
+        var bySize = groupBySize(root);
+
+        // Only hash candidate sets (same size >= 2)
+        var candidates = bySize.values().stream()
+                .filter(list -> list.size() >= 2)
+                .toList();
+
+        // Hash files within each candidate set and regroup by SHA-256
+        var byHash = candidates.stream()
+                .flatMap(List::stream)
+                .collect(Collectors.groupingBy(p -> {
+                    try {
+                        return hasher.sha256(p);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }));
+
+        // Build DuplicateGroup for hashes with at least two files
+        var groups = byHash.entrySet().stream()
+                .filter(e -> e.getValue().size() >= 2)
+                .map(e -> new DuplicateGroup(e.getKey(), e.getValue()))
+                .sorted((a, b) -> Integer.compare(b.size(), a.size()))
+                .toList();
+
+        return groups;
     }
 }
