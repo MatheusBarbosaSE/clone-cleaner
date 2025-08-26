@@ -10,6 +10,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -21,7 +22,7 @@ public class ConsoleApp {
         printBanner();
 
         if (args.length == 0) {
-            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv]");
+            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv] [--absolute]");
             return;
         }
 
@@ -33,6 +34,7 @@ public class ConsoleApp {
 
         KeepPolicy policy = parseKeepPolicy(args);
         boolean doDelete = hasFlag(args, "--delete");
+        boolean useAbsolute = hasFlag(args, "--absolute");
         Path reportPath = parseReportPath(args);
         Path csvPath = parseCsvPath(args);
 
@@ -47,7 +49,8 @@ public class ConsoleApp {
             System.out.println("Scan root: " + root.toAbsolutePath());
             System.out.println("Duplicate groups (by content): " + groups.size());
             System.out.println("Files in duplicate groups: " + totalFilesInGroups);
-            System.out.println("Keep policy: " + policy + (doDelete ? " | MODE: DELETE" : " | MODE: DRY-RUN"));
+            System.out.println("Keep policy: " + policy + (doDelete ? " | MODE: DELETE" : " | MODE: DRY-RUN")
+                    + (useAbsolute ? " | PATHS: ABSOLUTE" : " | PATHS: RELATIVE"));
             System.out.println();
 
             long plannedDeletes = 0;
@@ -57,11 +60,11 @@ public class ConsoleApp {
                 plannedDeletes += delCount;
 
                 System.out.println("Hash: " + g.getHash() + " | Files: " + g.size());
-                System.out.println("  KEEP -> " + keep);
+                System.out.println("  KEEP -> " + fp(root, keep, useAbsolute));
                 int shown = 0;
                 for (var p : g.getPaths()) {
                     if (!p.equals(keep)) {
-                        System.out.println("  DEL  -> " + p);
+                        System.out.println("  DEL  -> " + fp(root, p, useAbsolute));
                         shown++;
                         if (shown >= 10 && delCount > 10) {
                             System.out.println("  ... +" + (delCount - 10) + " more");
@@ -75,12 +78,12 @@ public class ConsoleApp {
             System.out.println("Planned deletions: " + plannedDeletes);
 
             if (reportPath != null) {
-                writeTxtReport(reportPath, groups, policy, cleaner);
+                writeTxtReport(reportPath, groups, policy, cleaner, root, useAbsolute);
                 System.out.println("TXT report saved to: " + reportPath.toAbsolutePath());
             }
 
             if (csvPath != null) {
-                writeCsvReport(csvPath, groups, policy, cleaner);
+                writeCsvReport(csvPath, groups, policy, cleaner, root, useAbsolute);
                 System.out.println("CSV report saved to: " + csvPath.toAbsolutePath());
             }
 
@@ -128,7 +131,12 @@ public class ConsoleApp {
         for (String a : args) {
             if (a.startsWith("--report=")) {
                 String p = a.substring("--report=".length());
-                return Path.of(p);
+                try {
+                    return Path.of(p);
+                } catch (InvalidPathException e) {
+                    System.err.println("Invalid report path: " + p);
+                    return null;
+                }
             }
         }
         return null;
@@ -138,7 +146,12 @@ public class ConsoleApp {
         for (String a : args) {
             if (a.startsWith("--csv=")) {
                 String p = a.substring("--csv=".length());
-                return Path.of(p);
+                try {
+                    return Path.of(p);
+                } catch (InvalidPathException e) {
+                    System.err.println("Invalid CSV path: " + p);
+                    return null;
+                }
             }
         }
         return null;
@@ -155,18 +168,20 @@ public class ConsoleApp {
         return cleaner.selectToKeep(g, policy);
     }
 
-    private static void writeTxtReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
+    private static void writeTxtReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner,
+                                       Path root, boolean absolute) throws IOException {
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write("CODE CLEANER - Duplicate Report\n");
             w.write("Policy: " + policy + "\n");
-            w.write("Groups: " + groups.size() + "\n\n");
+            w.write("Groups: " + groups.size() + "\n");
+            w.write("Paths: " + (absolute ? "ABSOLUTE" : "RELATIVE to " + root.toAbsolutePath()) + "\n\n");
             for (DuplicateGroup g : groups) {
                 Path keep = cleaner.selectToKeep(g, policy);
                 w.write("Hash: " + g.getHash() + " | Files: " + g.size() + "\n");
-                w.write("  KEEP -> " + keep + "\n");
+                w.write("  KEEP -> " + fp(root, keep, absolute) + "\n");
                 for (Path p : g.getPaths()) {
                     if (!p.equals(keep)) {
-                        w.write("  DEL  -> " + p + "\n");
+                        w.write("  DEL  -> " + fp(root, p, absolute) + "\n");
                     }
                 }
                 w.write("\n");
@@ -174,20 +189,32 @@ public class ConsoleApp {
         }
     }
 
-    private static void writeCsvReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
+    private static void writeCsvReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner,
+                                       Path root, boolean absolute) throws IOException {
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write("hash,keep,action,path\n"); // header
             for (DuplicateGroup g : groups) {
                 Path keep = cleaner.selectToKeep(g, policy);
+                String keepStr = fp(root, keep, absolute);
                 // row for KEEP
-                w.write(escape(g.getHash()) + "," + escape(keep.toString()) + ",KEEP," + escape(keep.toString()) + "\n");
+                w.write(escape(g.getHash()) + "," + escape(keepStr) + ",KEEP," + escape(keepStr) + "\n");
                 // rows for DEL
                 for (Path p : g.getPaths()) {
                     if (!p.equals(keep)) {
-                        w.write(escape(g.getHash()) + "," + escape(keep.toString()) + ",DEL," + escape(p.toString()) + "\n");
+                        w.write(escape(g.getHash()) + "," + escape(keepStr) + ",DEL," + escape(fp(root, p, absolute)) + "\n");
                     }
                 }
             }
+        }
+    }
+
+    private static String fp(Path root, Path p, boolean absolute) {
+        if (absolute) return p.toAbsolutePath().toString();
+        try {
+            return root.toAbsolutePath().relativize(p.toAbsolutePath()).toString();
+        } catch (IllegalArgumentException e) {
+            // Different roots/drives: fallback to absolute
+            return p.toAbsolutePath().toString();
         }
     }
 
