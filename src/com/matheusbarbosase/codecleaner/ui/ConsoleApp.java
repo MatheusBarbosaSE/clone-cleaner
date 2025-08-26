@@ -21,7 +21,7 @@ public class ConsoleApp {
         printBanner();
 
         if (args.length == 0) {
-            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt]");
+            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv]");
             return;
         }
 
@@ -34,6 +34,7 @@ public class ConsoleApp {
         KeepPolicy policy = parseKeepPolicy(args);
         boolean doDelete = hasFlag(args, "--delete");
         Path reportPath = parseReportPath(args);
+        Path csvPath = parseCsvPath(args);
 
         var hasher = new FileHasher();
         var finder = new DuplicateFinder(hasher);
@@ -74,8 +75,13 @@ public class ConsoleApp {
             System.out.println("Planned deletions: " + plannedDeletes);
 
             if (reportPath != null) {
-                writeReport(reportPath, groups, policy, cleaner);
-                System.out.println("Report saved to: " + reportPath.toAbsolutePath());
+                writeTxtReport(reportPath, groups, policy, cleaner);
+                System.out.println("TXT report saved to: " + reportPath.toAbsolutePath());
+            }
+
+            if (csvPath != null) {
+                writeCsvReport(csvPath, groups, policy, cleaner);
+                System.out.println("CSV report saved to: " + csvPath.toAbsolutePath());
             }
 
             if (!doDelete || plannedDeletes == 0) {
@@ -128,6 +134,16 @@ public class ConsoleApp {
         return null;
     }
 
+    private static Path parseCsvPath(String[] args) {
+        for (String a : args) {
+            if (a.startsWith("--csv=")) {
+                String p = a.substring("--csv=".length());
+                return Path.of(p);
+            }
+        }
+        return null;
+    }
+
     private static boolean confirm() {
         System.out.print("Type YES to confirm deletion: ");
         Scanner sc = new Scanner(System.in);
@@ -139,7 +155,7 @@ public class ConsoleApp {
         return cleaner.selectToKeep(g, policy);
     }
 
-    private static void writeReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
+    private static void writeTxtReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write("CODE CLEANER - Duplicate Report\n");
             w.write("Policy: " + policy + "\n");
@@ -156,6 +172,29 @@ public class ConsoleApp {
                 w.write("\n");
             }
         }
+    }
+
+    private static void writeCsvReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
+        try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
+            w.write("hash,keep,action,path\n"); // header
+            for (DuplicateGroup g : groups) {
+                Path keep = cleaner.selectToKeep(g, policy);
+                // row for KEEP
+                w.write(escape(g.getHash()) + "," + escape(keep.toString()) + ",KEEP," + escape(keep.toString()) + "\n");
+                // rows for DEL
+                for (Path p : g.getPaths()) {
+                    if (!p.equals(keep)) {
+                        w.write(escape(g.getHash()) + "," + escape(keep.toString()) + ",DEL," + escape(p.toString()) + "\n");
+                    }
+                }
+            }
+        }
+    }
+
+    private static String escape(String s) {
+        boolean needQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
+        String v = s.replace("\"", "\"\"");
+        return needQuote ? "\"" + v + "\"" : v;
     }
 
     private static void printBanner() {
