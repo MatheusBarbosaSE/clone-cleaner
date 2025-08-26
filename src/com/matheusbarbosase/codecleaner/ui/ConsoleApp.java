@@ -6,6 +6,9 @@ import com.matheusbarbosase.codecleaner.core.FileHasher;
 import com.matheusbarbosase.codecleaner.core.model.DuplicateGroup;
 import com.matheusbarbosase.codecleaner.core.model.KeepPolicy;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -18,7 +21,7 @@ public class ConsoleApp {
         printBanner();
 
         if (args.length == 0) {
-            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete]");
+            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt]");
             return;
         }
 
@@ -30,6 +33,7 @@ public class ConsoleApp {
 
         KeepPolicy policy = parseKeepPolicy(args);
         boolean doDelete = hasFlag(args, "--delete");
+        Path reportPath = parseReportPath(args);
 
         var hasher = new FileHasher();
         var finder = new DuplicateFinder(hasher);
@@ -68,6 +72,12 @@ public class ConsoleApp {
             }
 
             System.out.println("Planned deletions: " + plannedDeletes);
+
+            if (reportPath != null) {
+                writeReport(reportPath, groups, policy, cleaner);
+                System.out.println("Report saved to: " + reportPath.toAbsolutePath());
+            }
+
             if (!doDelete || plannedDeletes == 0) {
                 System.out.println("No deletion performed. Use --delete to apply.");
                 return;
@@ -108,6 +118,16 @@ public class ConsoleApp {
         return false;
     }
 
+    private static Path parseReportPath(String[] args) {
+        for (String a : args) {
+            if (a.startsWith("--report=")) {
+                String p = a.substring("--report=".length());
+                return Path.of(p);
+            }
+        }
+        return null;
+    }
+
     private static boolean confirm() {
         System.out.print("Type YES to confirm deletion: ");
         Scanner sc = new Scanner(System.in);
@@ -117,6 +137,25 @@ public class ConsoleApp {
 
     private static Path cleanerSelect(CleanerService cleaner, DuplicateGroup g, KeepPolicy policy) throws Exception {
         return cleaner.selectToKeep(g, policy);
+    }
+
+    private static void writeReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner) throws IOException {
+        try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
+            w.write("CODE CLEANER - Duplicate Report\n");
+            w.write("Policy: " + policy + "\n");
+            w.write("Groups: " + groups.size() + "\n\n");
+            for (DuplicateGroup g : groups) {
+                Path keep = cleaner.selectToKeep(g, policy);
+                w.write("Hash: " + g.getHash() + " | Files: " + g.size() + "\n");
+                w.write("  KEEP -> " + keep + "\n");
+                for (Path p : g.getPaths()) {
+                    if (!p.equals(keep)) {
+                        w.write("  DEL  -> " + p + "\n");
+                    }
+                }
+                w.write("\n");
+            }
+        }
     }
 
     private static void printBanner() {
