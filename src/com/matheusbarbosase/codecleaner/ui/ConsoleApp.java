@@ -18,17 +18,30 @@ import java.util.Scanner;
 
 public class ConsoleApp {
 
+    // ANSI (simple, optional)
+    private static final String RESET = "\u001B[0m";
+    private static final String BOLD = "\u001B[1m";
+    private static final String DIM = "\u001B[2m";
+    private static final String RED = "\u001B[31m";
+    private static final String GREEN = "\u001B[32m";
+    private static final String YELLOW = "\u001B[33m";
+    private static final String BLUE = "\u001B[34m";
+    private static final String MAGENTA = "\u001B[35m";
+    private static final String CYAN = "\u001B[36m";
+
     public static void main(String[] args) {
-        printBanner();
+        boolean useColor = !hasFlag(args, "--no-color");
+
+        printBanner(useColor);
 
         if (args.length == 0) {
-            System.out.println("Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv] [--absolute]");
+            println(useColor, YELLOW, "Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv] [--absolute] [--no-color]");
             return;
         }
 
         Path root = Path.of(args[0]);
         if (!Files.isDirectory(root)) {
-            System.err.println("Not a directory: " + root);
+            println(useColor, RED, "Not a directory: " + root);
             return;
         }
 
@@ -46,28 +59,33 @@ public class ConsoleApp {
             List<DuplicateGroup> groups = finder.findDuplicates(root);
 
             long totalFilesInGroups = groups.stream().mapToLong(g -> g.getPaths().size()).sum();
-            System.out.println("Scan root: " + root.toAbsolutePath());
-            System.out.println("Duplicate groups (by content): " + groups.size());
-            System.out.println("Files in duplicate groups: " + totalFilesInGroups);
-            System.out.println("Keep policy: " + policy + (doDelete ? " | MODE: DELETE" : " | MODE: DRY-RUN")
+            println(useColor, CYAN, "Scan root: " + root.toAbsolutePath());
+            println(useColor, CYAN, "Duplicate groups (by content): " + groups.size());
+            println(useColor, CYAN, "Files in duplicate groups: " + totalFilesInGroups);
+            println(useColor, CYAN, "Keep policy: " + policy
+                    + (doDelete ? " | MODE: DELETE" : " | MODE: DRY-RUN")
                     + (useAbsolute ? " | PATHS: ABSOLUTE" : " | PATHS: RELATIVE"));
             System.out.println();
 
             long plannedDeletes = 0;
+            long plannedBytes = 0;
+
             for (DuplicateGroup g : groups) {
                 var keep = cleanerSelect(cleaner, g, policy);
                 var delCount = g.size() - 1;
                 plannedDeletes += delCount;
 
-                System.out.println("Hash: " + g.getHash() + " | Files: " + g.size());
-                System.out.println("  KEEP -> " + fp(root, keep, useAbsolute));
+                println(useColor, BOLD + BLUE, "Hash: " + g.getHash() + " | Files: " + g.size());
+
+                println(useColor, GREEN, "  KEEP -> " + fp(root, keep, useAbsolute));
                 int shown = 0;
                 for (var p : g.getPaths()) {
                     if (!p.equals(keep)) {
-                        System.out.println("  DEL  -> " + fp(root, p, useAbsolute));
+                        println(useColor, RED, "  DEL  -> " + fp(root, p, useAbsolute));
+                        plannedBytes += safeSize(p);
                         shown++;
                         if (shown >= 10 && delCount > 10) {
-                            System.out.println("  ... +" + (delCount - 10) + " more");
+                            println(useColor, DIM, "  ... +" + (delCount - 10) + " more");
                             break;
                         }
                     }
@@ -75,25 +93,27 @@ public class ConsoleApp {
                 System.out.println();
             }
 
-            System.out.println("Planned deletions: " + plannedDeletes);
+            println(useColor, MAGENTA, "Planned deletions: " + plannedDeletes);
+            println(useColor, MAGENTA, "Potential space to reclaim: " + formatBytes(plannedBytes));
+            System.out.println();
 
             if (reportPath != null) {
                 writeTxtReport(reportPath, groups, policy, cleaner, root, useAbsolute);
-                System.out.println("TXT report saved to: " + reportPath.toAbsolutePath());
+                println(useColor, GREEN, "TXT report saved to: " + reportPath.toAbsolutePath());
             }
 
             if (csvPath != null) {
                 writeCsvReport(csvPath, groups, policy, cleaner, root, useAbsolute);
-                System.out.println("CSV report saved to: " + csvPath.toAbsolutePath());
+                println(useColor, GREEN, "CSV report saved to: " + csvPath.toAbsolutePath());
             }
 
             if (!doDelete || plannedDeletes == 0) {
-                System.out.println("No deletion performed. Use --delete to apply.");
+                println(useColor, YELLOW, "No deletion performed. Use --delete to apply.");
                 return;
             }
 
-            if (!confirm()) {
-                System.out.println("Aborted by user. No files were deleted.");
+            if (!confirm(useColor)) {
+                println(useColor, YELLOW, "Aborted by user. No files were deleted.");
                 return;
             }
 
@@ -102,10 +122,10 @@ public class ConsoleApp {
                 var keep = cleanerSelect(cleaner, g, policy);
                 deleted += cleaner.deleteAllExcept(g, keep);
             }
-            System.out.println("Deleted files: " + deleted);
+            println(useColor, GREEN, "Deleted files: " + deleted);
 
         } catch (Exception e) {
-            System.err.println("Operation failed: " + e.getMessage());
+            println(useColor, RED, "Operation failed: " + e.getMessage());
         }
     }
 
@@ -157,8 +177,8 @@ public class ConsoleApp {
         return null;
     }
 
-    private static boolean confirm() {
-        System.out.print("Type YES to confirm deletion: ");
+    private static boolean confirm(boolean useColor) {
+        print(useColor, BOLD + YELLOW, "Type YES to confirm deletion: ");
         Scanner sc = new Scanner(System.in);
         String line = sc.nextLine();
         return "YES".equals(line);
@@ -213,8 +233,7 @@ public class ConsoleApp {
         try {
             return root.toAbsolutePath().relativize(p.toAbsolutePath()).toString();
         } catch (IllegalArgumentException e) {
-            // Different roots/drives: fallback to absolute
-            return p.toAbsolutePath().toString();
+            return p.toAbsolutePath().toString(); // different drives
         }
     }
 
@@ -224,10 +243,39 @@ public class ConsoleApp {
         return needQuote ? "\"" + v + "\"" : v;
     }
 
-    private static void printBanner() {
-        System.out.println("=======================================");
-        System.out.println("            CODE CLEANER");
-        System.out.println("       Duplicate Files Detector");
-        System.out.println("=======================================");
+    private static long safeSize(Path p) {
+        try {
+            return Files.size(p);
+        } catch (IOException e) {
+            return 0L;
+        }
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        double v = bytes / 1024.0;
+        if (v < 1024) return String.format(Locale.ROOT, "%.1f KB", v);
+        v /= 1024.0;
+        if (v < 1024) return String.format(Locale.ROOT, "%.1f MB", v);
+        v /= 1024.0;
+        return String.format(Locale.ROOT, "%.1f GB", v);
+    }
+
+    private static void printBanner(boolean useColor) {
+        println(useColor, BOLD + CYAN,
+                "=======================================\n" +
+                "            CODE CLEANER\n" +
+                "       Duplicate Files Detector\n" +
+                "=======================================");
+    }
+
+    private static void println(boolean useColor, String color, String s) {
+        if (useColor) System.out.println(color + s + RESET);
+        else System.out.println(s);
+    }
+
+    private static void print(boolean useColor, String color, String s) {
+        if (useColor) System.out.print(color + s + RESET);
+        else System.out.print(s);
     }
 }
