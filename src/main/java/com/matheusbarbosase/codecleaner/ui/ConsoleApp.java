@@ -29,13 +29,16 @@ public class ConsoleApp {
     private static final String MAGENTA = "\u001B[35m";
     private static final String CYAN = "\u001B[36m";
 
+    private static final Scanner IN = new Scanner(System.in);
+
     public static void main(String[] args) {
         boolean useColor = !hasFlag(args, "--no-color");
 
         printBanner(useColor);
 
         if (args.length == 0) {
-            println(useColor, YELLOW, "Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv] [--absolute] [--no-color]");
+            println(useColor, YELLOW,
+                    "Usage: java ConsoleApp <directory> [--keep=first|newest] [--delete] [--report=path.txt] [--csv=path.csv] [--absolute] [--no-color]");
             return;
         }
 
@@ -133,8 +136,10 @@ public class ConsoleApp {
         for (String a : args) {
             if (a.startsWith("--keep=")) {
                 String v = a.substring("--keep=".length()).toLowerCase(Locale.ROOT);
-                if (v.equals("newest")) return KeepPolicy.NEWEST;
-                if (v.equals("first")) return KeepPolicy.FIRST;
+                if (v.equals("newest"))
+                    return KeepPolicy.NEWEST;
+                if (v.equals("first"))
+                    return KeepPolicy.FIRST;
                 System.out.println("Unknown keep policy: " + v + " (using FIRST)");
                 return KeepPolicy.FIRST;
             }
@@ -143,7 +148,9 @@ public class ConsoleApp {
     }
 
     private static boolean hasFlag(String[] args, String flag) {
-        for (String a : args) if (a.equalsIgnoreCase(flag)) return true;
+        for (String a : args)
+            if (a.equalsIgnoreCase(flag))
+                return true;
         return false;
     }
 
@@ -179,8 +186,7 @@ public class ConsoleApp {
 
     private static boolean confirm(boolean useColor) {
         print(useColor, BOLD + YELLOW, "Type YES to confirm deletion: ");
-        Scanner sc = new Scanner(System.in);
-        String line = sc.nextLine();
+        String line = IN.nextLine();
         return "YES".equals(line);
     }
 
@@ -189,7 +195,7 @@ public class ConsoleApp {
     }
 
     private static void writeTxtReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner,
-                                       Path root, boolean absolute) throws IOException {
+            Path root, boolean absolute) throws IOException {
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write("CODE CLEANER - Duplicate Report\n");
             w.write("Policy: " + policy + "\n");
@@ -210,7 +216,7 @@ public class ConsoleApp {
     }
 
     private static void writeCsvReport(Path out, List<DuplicateGroup> groups, KeepPolicy policy, CleanerService cleaner,
-                                       Path root, boolean absolute) throws IOException {
+            Path root, boolean absolute) throws IOException {
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write("hash,keep,action,path\n"); // header
             for (DuplicateGroup g : groups) {
@@ -221,7 +227,8 @@ public class ConsoleApp {
                 // rows for DEL
                 for (Path p : g.getPaths()) {
                     if (!p.equals(keep)) {
-                        w.write(escape(g.getHash()) + "," + escape(keepStr) + ",DEL," + escape(fp(root, p, absolute)) + "\n");
+                        w.write(escape(g.getHash()) + "," + escape(keepStr) + ",DEL," + escape(fp(root, p, absolute))
+                                + "\n");
                     }
                 }
             }
@@ -229,7 +236,8 @@ public class ConsoleApp {
     }
 
     private static String fp(Path root, Path p, boolean absolute) {
-        if (absolute) return p.toAbsolutePath().toString();
+        if (absolute)
+            return p.toAbsolutePath().toString();
         try {
             return root.toAbsolutePath().relativize(p.toAbsolutePath()).toString();
         } catch (IllegalArgumentException e) {
@@ -252,11 +260,14 @@ public class ConsoleApp {
     }
 
     private static String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024)
+            return bytes + " B";
         double v = bytes / 1024.0;
-        if (v < 1024) return String.format(Locale.ROOT, "%.1f KB", v);
+        if (v < 1024)
+            return String.format(Locale.ROOT, "%.1f KB", v);
         v /= 1024.0;
-        if (v < 1024) return String.format(Locale.ROOT, "%.1f MB", v);
+        if (v < 1024)
+            return String.format(Locale.ROOT, "%.1f MB", v);
         v /= 1024.0;
         return String.format(Locale.ROOT, "%.1f GB", v);
     }
@@ -270,12 +281,16 @@ public class ConsoleApp {
     }
 
     private static void println(boolean useColor, String color, String s) {
-        if (useColor) System.out.println(color + s + RESET);
-        else System.out.println(s);
+        if (useColor)
+            System.out.println(color + s + RESET);
+        else
+            System.out.println(s);
     }
 
     private static void print(boolean useColor, String color, String s) {
-        if (useColor) System.out.print(color + s + RESET);
-        else System.out.print(s);
+        if (useColor)
+            System.out.print(color + s + RESET);
+        else
+            System.out.print(s);
     }
 }
