@@ -1,0 +1,25 @@
+# Java / Maven
+/target/
+/.classpath
+/.project
+/.settings/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.iws
+*.ipr
+nbproject/
+out/
+eclipse/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local reports
+*.log
+*.txt
+*.csv
+*.tmp
