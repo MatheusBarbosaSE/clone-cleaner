@@ -1,36 +1,32 @@
 package com.matheusbarbosase.clonecleaner.core;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
-/**
- * Utility class responsible for hashing file content using SHA-256.
- */
 public class FileHasher {
 
-    /**
-     * Computes the SHA-256 hash of a given file.
-     *
-     * @param file the path to the file
-     * @return the hash as a hexadecimal string
-     * @throws IOException              if an I/O error occurs
-     * @throws NoSuchAlgorithmException if SHA-256 is not supported
-     */
-    public String hash(Path file) throws IOException, NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] data = Files.readAllBytes(file);
-        byte[] hash = digest.digest(data);
-        return toHex(hash);
+    public String sha256(Path file) throws IOException {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            try (InputStream in = Files.newInputStream(file);
+                 DigestInputStream dis = new DigestInputStream(in, md)) {
+                dis.transferTo(OutputStreamNull.INSTANCE);
+            }
+            return HexFormat.of().formatHex(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
+        }
     }
 
-    private String toHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
+    // Tiny sink to read stream fully
+    private static final class OutputStreamNull extends java.io.OutputStream {
+        static final OutputStreamNull INSTANCE = new OutputStreamNull();
+        @Override public void write(int b) {}
     }
 }
